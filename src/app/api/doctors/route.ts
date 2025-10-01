@@ -1,68 +1,36 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "../../../../lib/prisma";
 import parser from "../../../../lib/multer";
+import crypto from "crypto";
 
 // Disable body parser for file uploads
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false },
 };
-
-
-
-
-import crypto from "crypto";
-
-
 
 // Secret key for deterministic HMAC (keep safe!)
 const SECRET_KEY = process.env.HMAC_SECRET || "REPLACE_WITH_SECURE_KEY";
 
-/**
- * Generate 6-digit string from Aadhaar
- */
+// Generate 6-digit string from Aadhaar
 function generate6Digit(aadhaar: string, attempt: number = 0): string {
   const data = attempt === 0 ? aadhaar : `${aadhaar}:${attempt}`;
   const hash = crypto.createHmac("sha256", SECRET_KEY).update(data).digest("hex");
-  // take first 12 hex chars, convert to int, modulo 1_000_000
   const num = parseInt(hash.slice(0, 12), 16) % 1_000_000;
   return num.toString().padStart(6, "0");
 }
 
-/**
- * Generate unique 6-digit code for Aadhaar
- * @param aadhaar Aadhaar number
- */
-export async function getUnique6DigitCode(aadhaar: string): Promise<string> {
+// Generate unique 6-digit code for Aadhaar
+async function getUnique6DigitCode(aadhaar: string): Promise<string> {
   let attempt = 0;
   while (true) {
     const code = generate6Digit(aadhaar, attempt);
-
-    // Check if code exists in Prisma model (replace 'UserCode' and 'code' with your model/field)
-    const existing = await prisma.doctor.findUnique({
-      where: { id: `NOVADOC-${code}` },
-    });
-
-    if (!existing) {
-      return code; // unique code found
-    }
-
-    attempt += 1; // increment attempt to change hash
+    const existing = await prisma.doctor.findUnique({ where: { id: `NOVADOC-${code}` } });
+    if (!existing) return code;
+    attempt += 1;
   }
 }
 
-
-
-
-type ResponseData = {
-  doctor?: any;
-  doctors?: any[];
-  fileUrls?: string[];
-  error?: string;
-};
-
-// Helper to handle multer with promises
+// Helper for multer
 function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: any) {
   return new Promise<void>((resolve, reject) => {
     fn(req, res, (result: any) => {
@@ -72,30 +40,35 @@ function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: any) {
   });
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ResponseData>
-) {
+type ResponseData = {
+  doctor?: any;
+  doctors?: any[];
+  fileUrls?: string[];
+  error?: string;
+};
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
   try {
     if (req.method === "POST") {
-      // Use multer for multiple file upload
+      // Upload multiple files
       await runMiddleware(req, res, parser.array("documents"));
 
       // @ts-ignore
       const data = req.body;
-       const uniqueCode = await getUnique6DigitCode(data?.aadhaarNumber || crypto.randomUUID());
-            const id = `NOVADOC-${uniqueCode}`;
+
+      const uniqueCode = await getUnique6DigitCode(data?.aadhaarNumber || crypto.randomUUID());
+      const id = `NOVADOC-${uniqueCode}`;
 
       // @ts-ignore
       const files = req.files as Express.Multer.File[];
       const fileUrls = files?.map((file) => file.path) || [];
 
-      // Convert date strings to Date objects if needed
+      // Convert dates
       if (data.dateOfBirth) data.dateOfBirth = new Date(data.dateOfBirth);
       if (data.registrationValidTill) data.registrationValidTill = new Date(data.registrationValidTill);
       if (data.verificationDate) data.verificationDate = new Date(data.verificationDate);
 
-      // Convert boolean fields from string to boolean
+      // Convert booleans
       const booleanFields = [
         "mbbsVerified","pgDegree","superSpecialization","internshipComplete",
         "fellowshipCert","affiliationLetterUploaded","experienceCertUploaded",
@@ -105,9 +78,7 @@ export default async function handler(
         "docsCollected","validatedNMC","backgroundCheck","committeeApproved"
       ];
       for (const field of booleanFields) {
-        if (data[field] !== undefined) {
-          data[field] = data[field] === "true" || data[field] === true;
-        }
+        if (data[field] !== undefined) data[field] = data[field] === "true" || data[field] === true;
       }
 
       const doctor = await prisma.doctor.create({
@@ -122,9 +93,8 @@ export default async function handler(
       return res.status(201).json({ doctor, fileUrls });
     }
 
-    // GET all doctors
     if (req.method === "GET") {
-      const doctors = await prisma.doctor.findMany();
+      const doctors = await prisma.doctor.findMany({ include: { user: true } });
       return res.status(200).json({ doctors });
     }
 

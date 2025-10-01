@@ -4,40 +4,48 @@ import prisma from "../../../../lib/prisma";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
 
-  if (req.method === "GET") {
-    const user = await prisma.user.findUnique({ where: { id: id as string }, include: { doctors: true } });
-    if (!user) return res.status(404).json({ error: "User not found" });
-    return res.status(200).json(user);
-  } else if (req.method === "PUT") {
-   try {
-  const updateData: Record<string, any> = {};
-
-  // Loop over req.body keys and only include defined values
-  for (const key in req.body) {
-    if (req.body[key] !== undefined) {
-      updateData[key] = req.body[key];
-    }
+  if (!id || typeof id !== "string") {
+    return res.status(400).json({ error: "Invalid or missing user ID" });
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: id as string },
-    data: updateData,
-  });
+  try {
+    if (req.method === "GET") {
+      const user = await prisma.user.findUnique({
+        where: { id },
+        include: { doctors: true },
+      });
 
-  return res.status(200).json(updatedUser);
-} catch (err: any) {
-  return res.status(500).json({ error: err.message });
-}
-
-  } else if (req.method === "DELETE") {
-    try {
-      await prisma.user.delete({ where: { id: id as string } });
-      return res.status(200).json({ message: "User deleted" });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      if (!user) return res.status(404).json({ error: "User not found" });
+      return res.status(200).json(user);
     }
-  } else {
+
+    if (req.method === "PUT") {
+      // Only include defined fields from body
+      const updateData: Record<string, any> = {};
+      for (const key in req.body) {
+        if (req.body[key] !== undefined) updateData[key] = req.body[key];
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "No fields to update" });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: updateData,
+      });
+
+      return res.status(200).json(updatedUser);
+    }
+
+    if (req.method === "DELETE") {
+      await prisma.user.delete({ where: { id } });
+      return res.status(200).json({ message: "User deleted" });
+    }
+
     res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 }

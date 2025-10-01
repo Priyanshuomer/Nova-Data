@@ -25,11 +25,15 @@ function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: any) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
   const { id } = req.query;
 
+  if (!id || typeof id !== "string") {
+    return res.status(400).json({ error: "Invalid doctor ID" });
+  }
+
   try {
     if (req.method === "GET") {
-      const doctor = await prisma.doctor.findUnique({ 
-        where: { id: id as string }, 
-        include: { user: { select: { id: true } } } // Only include user IDs
+      const doctor = await prisma.doctor.findUnique({
+        where: { id },
+        include: { user: { select: { id: true } } }, // only IDs
       });
       if (!doctor) return res.status(404).json({ error: "Doctor not found" });
       return res.status(200).json({ doctor });
@@ -43,16 +47,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       // @ts-ignore
       const fileUrl: string | null = req.file?.path || null;
 
-      // Build update object dynamically
+      // Dynamically build update object
       const updateData: any = {};
-      if (data.fullName) updateData.fullName = data.fullName;
-      if (data.currentPracticeAddress) updateData.currentPracticeAddress = data.currentPracticeAddress;
-      if (data.contactNumber) updateData.contactNumber = data.contactNumber;
-      if (fileUrl) updateData.affiliationLetterUploaded = true;
-      if (fileUrl) updateData.docxUrl = { push: fileUrl }; // append new file URL to array
+      Object.keys(data).forEach((key) => {
+        if (data[key] !== undefined) updateData[key] = data[key];
+      });
+
+      // Append file if uploaded
+      if (fileUrl) {
+        updateData.affiliationLetterUploaded = true;
+        updateData.docxUrl = { push: fileUrl };
+      }
 
       const updatedDoctor = await prisma.doctor.update({
-        where: { id: id as string },
+        where: { id },
         data: updateData,
       });
 
@@ -60,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     if (req.method === "DELETE") {
-      await prisma.doctor.delete({ where: { id: id as string } });
+      await prisma.doctor.delete({ where: { id } });
       return res.status(200).json({ message: "Doctor deleted" });
     }
 
