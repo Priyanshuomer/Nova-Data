@@ -4,9 +4,7 @@ import parser from "../../../../lib/multer";
 import crypto from "crypto";
 
 // Disable body parser for file uploads
-export const config = {
-  api: { bodyParser: false },
-};
+export const config = { api: { bodyParser: false } };
 
 // Secret key for deterministic HMAC (keep safe!)
 const SECRET_KEY = process.env.HMAC_SECRET || "REPLACE_WITH_SECURE_KEY";
@@ -35,7 +33,7 @@ function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: any) {
   return new Promise<void>((resolve, reject) => {
     fn(req, res, (result: any) => {
       if (result instanceof Error) return reject(result);
-      return resolve();
+      resolve();
     });
   });
 }
@@ -47,60 +45,60 @@ type ResponseData = {
   error?: string;
 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+// POST handler
+export async function POST(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
   try {
-    if (req.method === "POST") {
-      // Upload multiple files
-      await runMiddleware(req, res, parser.array("documents"));
+    await runMiddleware(req, res, parser.array("documents"));
 
-      // @ts-ignore
-      const data = req.body;
+    // @ts-ignore
+    const data = req.body;
 
-      const uniqueCode = await getUnique6DigitCode(data?.aadhaarNumber || crypto.randomUUID());
-      const id = `NOVADOC-${uniqueCode}`;
+    const uniqueCode = await getUnique6DigitCode(data?.aadhaarNumber || crypto.randomUUID());
+    const id = `NOVADOC-${uniqueCode}`;
 
-      // @ts-ignore
-      const files = req.files as Express.Multer.File[];
-      const fileUrls = files?.map((file) => file.path) || [];
+    // @ts-ignore
+    const files = req.files as Express.Multer.File[];
+    const fileUrls = files?.map((file) => file.path) || [];
 
-      // Convert dates
-      if (data.dateOfBirth) data.dateOfBirth = new Date(data.dateOfBirth);
-      if (data.registrationValidTill) data.registrationValidTill = new Date(data.registrationValidTill);
-      if (data.verificationDate) data.verificationDate = new Date(data.verificationDate);
+    // Convert dates
+    if (data.dateOfBirth) data.dateOfBirth = new Date(data.dateOfBirth);
+    if (data.registrationValidTill) data.registrationValidTill = new Date(data.registrationValidTill);
+    if (data.verificationDate) data.verificationDate = new Date(data.verificationDate);
 
-      // Convert booleans
-      const booleanFields = [
-        "mbbsVerified","pgDegree","superSpecialization","internshipComplete",
-        "fellowshipCert","affiliationLetterUploaded","experienceCertUploaded",
-        "practiceLicenseUploaded","noPendingCases","ethicsCompliance",
-        "indemnityInsurance","policeVerification","onboardingAgreement",
-        "consentGoogleMeet","eSignEnabled","chequeVerified",
-        "docsCollected","validatedNMC","backgroundCheck","committeeApproved"
-      ];
-      for (const field of booleanFields) {
-        if (data[field] !== undefined) data[field] = data[field] === "true" || data[field] === true;
-      }
-
-      const doctor = await prisma.doctor.create({
-        data: {
-          id,
-          ...data,
-          docxUrl: fileUrls,
-          affiliationLetterUploaded: data.affiliationLetterUploaded || fileUrls.length > 0,
-        },
-      });
-
-      return res.status(201).json({ doctor, fileUrls });
+    // Convert booleans
+    const booleanFields = [
+      "mbbsVerified","pgDegree","superSpecialization","internshipComplete",
+      "fellowshipCert","affiliationLetterUploaded","experienceCertUploaded",
+      "practiceLicenseUploaded","noPendingCases","ethicsCompliance",
+      "indemnityInsurance","policeVerification","onboardingAgreement",
+      "consentGoogleMeet","eSignEnabled","chequeVerified",
+      "docsCollected","validatedNMC","backgroundCheck","committeeApproved"
+    ];
+    for (const field of booleanFields) {
+      if (data[field] !== undefined) data[field] = data[field] === "true" || data[field] === true;
     }
 
-    if (req.method === "GET") {
-      const doctors = await prisma.doctor.findMany({ include: { user: true } });
-      return res.status(200).json({ doctors });
-    }
+    const doctor = await prisma.doctor.create({
+      data: {
+        id,
+        ...data,
+        docxUrl: fileUrls,
+        affiliationLetterUploaded: data.affiliationLetterUploaded || fileUrls.length > 0,
+      },
+    });
 
-    res.setHeader("Allow", ["POST", "GET"]);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+    return res.status(201).json({ doctor, fileUrls });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// GET handler
+export async function GET(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+  try {
+    const doctors = await prisma.doctor.findMany({ include: { user: true } });
+   return new Response(JSON.stringify({ doctors }), { status: 200 });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 }

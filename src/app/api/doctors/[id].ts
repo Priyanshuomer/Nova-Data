@@ -22,58 +22,71 @@ function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: any) {
   });
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
-  const { id } = req.query;
+// GET a single doctor
+export async function GET(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+  const { searchParams } = new URL(req.url || "", `http://${req.headers.host}`);
+  const id = searchParams.get("id");
 
-  if (!id || typeof id !== "string") {
-    return res.status(400).json({ error: "Invalid doctor ID" });
-  }
+  if (!id) return res.status(400).json({ error: "Invalid doctor ID" });
 
   try {
-    if (req.method === "GET") {
-      const doctor = await prisma.doctor.findUnique({
-        where: { id },
-        include: { user: { select: { id: true } } }, // only IDs
-      });
-      if (!doctor) return res.status(404).json({ error: "Doctor not found" });
-      return res.status(200).json({ doctor });
+    const doctor = await prisma.doctor.findUnique({
+      where: { id },
+      include: { user: { select: { id: true } } },
+    });
+    if (!doctor) return res.status(404).json({ error: "Doctor not found" });
+    return res.status(200).json({ doctor });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// PUT update doctor
+export async function PUT(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+  const { searchParams } = new URL(req.url || "", `http://${req.headers.host}`);
+  const id = searchParams.get("id");
+
+  if (!id) return res.status(400).json({ error: "Invalid doctor ID" });
+
+  try {
+    await runMiddleware(req, res, parser.single("document"));
+
+    // @ts-ignore
+    const data = req.body;
+    // @ts-ignore
+    const fileUrl: string | null = req.file?.path || null;
+
+    const updateData: any = {};
+    Object.keys(data).forEach((key) => {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    });
+
+    if (fileUrl) {
+      updateData.affiliationLetterUploaded = true;
+      updateData.docxUrl = { push: fileUrl };
     }
 
-    if (req.method === "PUT") {
-      await runMiddleware(req, res, parser.single("document"));
+    const updatedDoctor = await prisma.doctor.update({
+      where: { id },
+      data: updateData,
+    });
 
-      // @ts-ignore
-      const data = req.body;
-      // @ts-ignore
-      const fileUrl: string | null = req.file?.path || null;
+    return res.status(200).json({ doctor: updatedDoctor, fileUrl });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
 
-      // Dynamically build update object
-      const updateData: any = {};
-      Object.keys(data).forEach((key) => {
-        if (data[key] !== undefined) updateData[key] = data[key];
-      });
+// DELETE doctor
+export async function DELETE(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+  const { searchParams } = new URL(req.url || "", `http://${req.headers.host}`);
+  const id = searchParams.get("id");
 
-      // Append file if uploaded
-      if (fileUrl) {
-        updateData.affiliationLetterUploaded = true;
-        updateData.docxUrl = { push: fileUrl };
-      }
+  if (!id) return res.status(400).json({ error: "Invalid doctor ID" });
 
-      const updatedDoctor = await prisma.doctor.update({
-        where: { id },
-        data: updateData,
-      });
-
-      return res.status(200).json({ doctor: updatedDoctor, fileUrl });
-    }
-
-    if (req.method === "DELETE") {
-      await prisma.doctor.delete({ where: { id } });
-      return res.status(200).json({ message: "Doctor deleted" });
-    }
-
-    res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+  try {
+    await prisma.doctor.delete({ where: { id } });
+    return res.status(200).json({ message: "Doctor deleted" });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

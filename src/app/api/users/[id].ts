@@ -1,51 +1,60 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "../../../../lib/prisma";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { id } = req.query;
+type ResponseData = {
+  user?: any;
+  message?: string;
+  error?: string;
+};
 
-  if (!id || typeof id !== "string") {
-    return res.status(400).json({ error: "Invalid or missing user ID" });
-  }
+// GET user by ID
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id");
+  if (!id) return new Response(JSON.stringify({ error: "Invalid or missing user ID" }), { status: 400 });
 
   try {
-    if (req.method === "GET") {
-      const user = await prisma.user.findUnique({
-        where: { id },
-        include: { doctors: true },
-      });
+    const user = await prisma.user.findUnique({ where: { id }, include: { doctors: true } });
+    if (!user) return new Response(JSON.stringify({ error: "User not found" }), { status: 404 });
 
-      if (!user) return res.status(404).json({ error: "User not found" });
-      return res.status(200).json(user);
-    }
-
-    if (req.method === "PUT") {
-      // Only include defined fields from body
-      const updateData: Record<string, any> = {};
-      for (const key in req.body) {
-        if (req.body[key] !== undefined) updateData[key] = req.body[key];
-      }
-
-      if (Object.keys(updateData).length === 0) {
-        return res.status(400).json({ error: "No fields to update" });
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id },
-        data: updateData,
-      });
-
-      return res.status(200).json(updatedUser);
-    }
-
-    if (req.method === "DELETE") {
-      await prisma.user.delete({ where: { id } });
-      return res.status(200).json({ message: "User deleted" });
-    }
-
-    res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    return new Response(JSON.stringify({ user }), { status: 200 });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
+}
+
+// PUT update user
+export async function PUT(req: Request) {
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id");
+  if (!id) return new Response(JSON.stringify({ error: "Invalid or missing user ID" }), { status: 400 });
+
+  try {
+    const body = await req.json();
+    const updateData: Record<string, any> = {};
+    for (const key in body) {
+      if (body[key] !== undefined) updateData[key] = body[key];
+    }
+
+    if (Object.keys(updateData).length === 0)
+      return new Response(JSON.stringify({ error: "No fields to update" }), { status: 400 });
+
+    const updatedUser = await prisma.user.update({ where: { id }, data: updateData });
+    return new Response(JSON.stringify({ user: updatedUser }), { status: 200 });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
+}
+
+// DELETE user
+export async function DELETE(req: Request) {
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id");
+  if (!id) return new Response(JSON.stringify({ error: "Invalid or missing user ID" }), { status: 400 });
+
+  try {
+    await prisma.user.delete({ where: { id } });
+    return new Response(JSON.stringify({ message: "User deleted" }), { status: 200 });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }
