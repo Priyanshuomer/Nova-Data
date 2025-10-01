@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  name            String
+  email           String?  
+  contactNumber   String?     
+  aadhaarVerified Boolean   @default(false)
+  aadhaarNumber   String?   // Optional: for Aadhaar document tracking
+   
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  doctors         Doctor[]        @relation("UserDoctors")
+}
+
+model Doctor {
+  id                   String    @id @default(uuid())
+  user                 User[]    @relation("UserDoctors")
+
+  // Personal Information
+  fullName             String
+  parentName           String?
+  dateOfBirth          DateTime
+  permanentAddress     String?
+  currentPracticeAddress String
+  contactNumber        String
+  email                String
+  emergencyContact     String?
+  aadhaarNumber        String?
+
+  // Education & Qualifications
+  mbbsVerified         Boolean   @default(false)
+  pgDegree             Boolean   @default(false)
+  superSpecialization  Boolean   @default(false)
+  internshipComplete   Boolean   @default(false)
+  fellowshipCert       Boolean   @default(false)
+
+  // Professional Registration & Licensing
+  registrationNo       String?
+  registrationType     String?
+  registrationIssuedBy String?
+  registrationCouncil  String?
+  registrationValidTill DateTime?
+
+  // Professional Practice Credentials
+  affiliationLetterUploaded Boolean @default(false)
+  experienceCertUploaded    Boolean @default(false)
+  practiceLicenseUploaded   Boolean @default(false)
+  languagesKnown            String?
+
+  // Compliance & Legal Declarations
+  noPendingCases         Boolean   @default(false)
+  ethicsCompliance       Boolean   @default(false)
+  indemnityInsurance     Boolean   @default(false)
+  policeVerification     Boolean   @default(false)
+  onboardingAgreement    Boolean   @default(false)
+
+  // Digital & Platform Requirements
+  consentGoogleMeet      Boolean   @default(false)
+  eSignEnabled           Boolean   @default(false)
+
+  bankName               String?
+  accountNumber          String?
+  ifscCode               String?
+  chequeVerified         Boolean   @default(false)
+  gstRegistration        String?
+
+  // Verification Process
+  docsCollected          Boolean   @default(false)
+  validatedNMC           Boolean   @default(false)
+  backgroundCheck        Boolean   @default(false)
+  committeeApproved      Boolean   @default(false)
+  committeeStatus        String?
+  verificationOfficer    String?
+  verificationDate       DateTime?
+
+  docxUrl                String[] @default([]) // store multiple file URLs
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([registrationNo])
+  @@index([aadhaarNumber])
+}
+
